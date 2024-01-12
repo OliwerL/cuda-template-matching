@@ -5,213 +5,216 @@
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
 #include <iostream>
+#include <cmath>
 
 using namespace std;
 
-__global__ void readRGBValuesKernel(uint8_t* d_image, int width, int height, int channels, float3* d_rgbValues) {
-    int x = blockIdx.x * blockDim.x + threadIdx.x;
-    int y = blockIdx.y * blockDim.y + threadIdx.y;
-    int idx = (y * width + x) * channels;
 
-    if (x < width && y < height) {
-        if (channels >= 3) {
-            float R = d_image[idx];
-            float G = d_image[idx + 1];
-            float B = d_image[idx + 2];
-            d_rgbValues[y * width + x] = make_float3(R, G, B);
-        }
-    }
+__global__ void transparencyPixels(uint8_t* image, int* output, int width, int height, int channels) {
+	int x = blockIdx.x * blockDim.x + threadIdx.x;
+	int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+	if (x < width && y < height) {
+		int idx = (y * width + x) * channels; // Zakładamy, że obraz jest w formacie RGB
+		if (image[idx] < 10 && image[idx + 1] < 10 && image[idx + 2] < 10) {
+			output[y * width + x] = 1;
+		}
+		else {
+			output[y * width + x] = 0;
+		}
+	}
 }
 
-__global__ void processImageKernel(uint8_t* d_image, int width, int height, int channels) {
-    int x = blockIdx.x * blockDim.x + threadIdx.x;
-    int y = blockIdx.y * blockDim.y + threadIdx.y;
+__global__ void grayscaleKernel(uint8_t* d_image, uint8_t* dev_three, int width, int height, int channels) {
+	int x = blockIdx.x * blockDim.x + threadIdx.x;
+	int y = blockIdx.y * blockDim.y + threadIdx.y;
 
-    if (x < width && y < height) {
-        int idx = (y * width + x) * channels;
+	if (x < width && y < height) {
+		int idx = (y * width + x) * channels;
 
-        if (channels >= 3) {
-            uint8_t R = d_image[idx];
-            uint8_t G = d_image[idx + 1];
-            uint8_t B = d_image[idx + 2];
+		if (channels >= 3) {
+			uint8_t R = d_image[idx];
+			uint8_t G = d_image[idx + 1];
+			uint8_t B = d_image[idx + 2];
 
-            uint8_t gray = R * 0.2126 + G * 0.7152 + B * 0.0722;
-
-            // Ustawienie wartości RGB na wartość skali szarości
-            d_image[idx] = gray;       // R
-            d_image[idx + 1] = gray;   // G
-            d_image[idx + 2] = gray;   // B
-        }
-
-
-    }
+			uint8_t gray = R * 0.2126 + G * 0.7152 + B * 0.0722;
+			dev_three[idx] = gray;
+			dev_three[idx + 1] = gray;
+			dev_three[idx + 2] = gray;
+		}
+	}
 }
 
-__global__ void gaussianBlurKernel(uint8_t* d_image, uint8_t* d_result, int width, int height, int channels) {
-    const float gaussianKernel[5][5] = {
-    {1.0f / 273.0f, 4.0f / 273.0f, 7.0f / 273.0f, 4.0f / 273.0f, 1.0f / 273.0f},
-    {4.0f / 273.0f, 16.0f / 273.0f, 26.0f / 273.0f, 16.0f / 273.0f, 4.0f / 273.0f},
-    {7.0f / 273.0f, 26.0f / 273.0f, 41.0f / 273.0f, 26.0f / 273.0f, 7.0f / 273.0f},
-    {4.0f / 273.0f, 16.0f / 273.0f, 26.0f / 273.0f, 16.0f / 273.0f, 4.0f / 273.0f},
-    {1.0f / 273.0f, 4.0f / 273.0f, 7.0f / 273.0f, 4.0f / 273.0f, 1.0f / 273.0f}               //test komenatrz
-    };
+__global__ void channelExtensionKernel(uint8_t* dev_one, uint8_t* dev_three, int width, int height, int channels) {
+	int x = blockIdx.x * blockDim.x + threadIdx.x;
+	int y = blockIdx.y * blockDim.y + threadIdx.y;
 
-    int x = blockIdx.x * blockDim.x + threadIdx.x;
-    int y = blockIdx.y * blockDim.y + threadIdx.y;
-    int idx = (y * width + x) * channels;
-
-    if (x >= width || y >= height) return;
-
-    float sumR = 0.0f, sumG = 0.0f, sumB = 0.0f;
-    int kernelRadius = 2; // Radius jądra 5x5 jest równy 2
-
-    for (int ky = -kernelRadius; ky <= kernelRadius; ++ky) {
-        for (int kx = -kernelRadius; kx <= kernelRadius; ++kx) {
-            int px = min(max(x + kx, 0), width - 1);
-            int py = min(max(y + ky, 0), height - 1);
-            int idxx = (py * width + px) * channels;
-
-            float kernelValue = gaussianKernel[ky + kernelRadius][kx + kernelRadius];
-            sumR += d_image[idxx] * kernelValue;
-            sumG += d_image[idxx + 1] * kernelValue;
-            sumB += d_image[idxx + 2] * kernelValue;
-        }
-    }
-    d_result[idx] = min(max(static_cast<int>(sumR), 0), 255);
-    d_result[idx + 1] = min(max(static_cast<int>(sumG), 0), 255);
-    d_result[idx + 2] = min(max(static_cast<int>(sumB), 0), 255);
+	if (x < width && y < height) {
+		int idx = (y * width + x) * channels;
+		for (int c = 0; c < 3; c++) { //rgb
+			dev_three[idx + c] = dev_one[y * width + x];
+		}
+	}
 }
 
-__global__ void sepiaKernel(uint8_t* d_image, int width, int height, int channels) {
-    int x = blockIdx.x * blockDim.x + threadIdx.x;
-    int y = blockIdx.y * blockDim.y + threadIdx.y;
+__global__ void channelCompressionKernel(uint8_t* dev_one, uint8_t* dev_three, int width, int height, int channels) {
+	int x = blockIdx.x * blockDim.x + threadIdx.x;
+	int y = blockIdx.y * blockDim.y + threadIdx.y;
 
-    if (x < width && y < height) {
-        int idx = (y * width + x) * channels;
-
-        if (channels >= 3) {
-            float R = d_image[idx];
-            float G = d_image[idx + 1];
-            float B = d_image[idx + 2];
-
-            float sepiaR = min(255.0f, (R * 0.393f) + (G * 0.769f) + (B * 0.189f));
-            float sepiaG = min(255.0f, (R * 0.349f) + (G * 0.686f) + (B * 0.168f));
-            float sepiaB = min(255.0f, (R * 0.272f) + (G * 0.534f) + (B * 0.131f));
-
-
-            d_image[idx] = static_cast<uint8_t>(sepiaR);
-            d_image[idx + 1] = static_cast<uint8_t>(sepiaG);
-            d_image[idx + 2] = static_cast<uint8_t>(sepiaB);
-        }
-    }
+	if (x < width && y < height) {
+		int idx = (y * width + x) * channels;
+		dev_one[y * width + x] = dev_three[idx];
+	}
 }
 
-__global__ void negativeKernel(uint8_t* d_image, int width, int height, int channels) {
-    int x = blockIdx.x * blockDim.x + threadIdx.x;
-    int y = blockIdx.y * blockDim.y + threadIdx.y;
+__global__ void subtractImagesKernel(uint8_t* image, uint8_t* imageA, int* sample_check, int* transparency_array,
+	int width, int height, int widthA, int heightA, int treshold) {
+	int startX = blockIdx.x * blockDim.x + threadIdx.x;
+	int startY = blockIdx.y * blockDim.y + threadIdx.y;
+	//printf("%d, %d\n", startX, startY);
+	if (startX <= (width - widthA) && startY <= (height - heightA)) {
 
-    if (x < width && y < height) {
-        int idx = (y * width + x) * channels;
-
-        if (channels >= 3) {
-            d_image[idx] = 255 - d_image[idx];       // R
-            d_image[idx + 1] = 255 - d_image[idx + 1];   // G
-            d_image[idx + 2] = 255 - d_image[idx + 2];   // B
-        }
-    }
+		int check_buffer = 0;
+		for (int y = 0; y < heightA; y++) {
+			for (int x = 0; x < widthA; x++) {
+				int largeIdx = ((startY + y) * width + (startX + x)) * 3;
+				int smallIdx = (y * widthA + x) * 3;
+				int diff = 0;
+				//printf("%d, %d\n", image[largeIdx], imageA[smallIdx]);
+				if (transparency_array[y * widthA + x] == 1)
+				{
+					for (int c = 0; c < 3; c++) { //rgb
+						diff += abs(image[largeIdx + c] - imageA[smallIdx + c]);
+					}
+					if (diff < 30)
+					{
+						check_buffer++;
+					}
+				}
+				else if (transparency_array[y * widthA + x] == 0)
+				{
+					for (int c = 0; c < 3; c++) { //rgb
+						diff += abs(image[largeIdx + c]);
+					}
+					if (diff > 10)
+					{
+						check_buffer++;
+					}
+				}
+			}
+		}
+		if (check_buffer >= treshold)
+		{
+			sample_check[startY * (width - widthA) + startX] = 1;
+			printf("\n Template found; precision: %d / %d, coordinates: %d, %d\n", check_buffer, widthA * heightA, startX, startY);
+		}
+		else
+			sample_check[startY * (width - widthA) + startX] = 0;
+	}
 }
 
 
 int main() {
-    int widthA, heightA, channelsA;
-    uint8_t* h_imageA = stbi_load("litera.jpg", &widthA, &heightA, &channelsA, 0);
-    if (h_imageA == nullptr) {
-        cerr << "Error loading image 'litera.png'." << endl;
-        return -1;
-    }
+	int widthA, heightA, channelsA, width, height, channels;
+	uint8_t* host_imageA = stbi_load("litera.jpg", &widthA, &heightA, &channelsA, 0);
+	if (host_imageA == nullptr) {
+		cerr << "Error loading sample image." << endl;
+		return -1;
+	}
 
-    size_t img_sizeA = widthA * heightA * channelsA;
-    uint8_t* d_imageA;
-    float3* d_rgbValuesA;
-    cudaMalloc(&d_imageA, img_sizeA);
-    cudaMalloc(&d_rgbValuesA, widthA * heightA * sizeof(float3));
-    cudaMemcpy(d_imageA, h_imageA, img_sizeA, cudaMemcpyHostToDevice);
+	uint8_t* host_image = stbi_load("testnyga.jpg", &width, &height, &channels, 0);
+	if (host_image == nullptr) {
+		cerr << "Error loading image to check." << endl;
+		return -1;
+	}
 
-    // Ustaw rozmiar siatki i bloku dla obrazu 'litera.png'
-    dim3 blockSizeA(16, 16);
-    dim3 gridSizeA((widthA + blockSizeA.x - 1) / blockSizeA.x, (heightA + blockSizeA.y - 1) / blockSizeA.y);
+	// wczytanie wymiarow 
+	size_t img_sizeA = widthA * heightA * channelsA;
+	uint8_t* dev_imageA;
+	size_t img_size = width * height * channels;
+	uint8_t* dev_image;
 
-    // Uruchom kernel do wczytywania wartości RGB
-    readRGBValuesKernel << <gridSizeA, blockSizeA >> > (d_imageA, widthA, heightA, channelsA, d_rgbValuesA);
-    cudaDeviceSynchronize();
+	// ustawienia blokow na gpu
+	dim3 blockSize(16, 16);
+	dim3 gridSizeA((widthA + blockSize.x - 1) / blockSize.x, (heightA + blockSize.y - 1) / blockSize.y);
+	dim3 gridSize((width - widthA + blockSize.x - 1) / blockSize.x, (height - heightA + blockSize.y - 1) / blockSize.y);
 
-    // Skopiuj wyniki z powrotem do pamięci hosta
-    float3* h_rgbValuesA = new float3[widthA * heightA];                //wartosci rgb litery A
-    cudaMemcpy(h_rgbValuesA, d_rgbValuesA, widthA * heightA * sizeof(float3), cudaMemcpyDeviceToHost);
+	// zrobienie tablicy skladajacej sie z 0 i 1 (tam gdzie 1 znaczy ze jest nasza litera A)
+	int* dev_transparency_arr;
+	cudaMalloc((void**)&dev_imageA, img_sizeA * sizeof(uint8_t));
+	cudaMalloc((void**)&dev_transparency_arr, widthA * heightA * sizeof(int));
+	cudaMemcpy(dev_imageA, host_imageA, img_sizeA * sizeof(uint8_t), cudaMemcpyHostToDevice);
+	transparencyPixels << <gridSizeA, blockSize >> > (dev_imageA, dev_transparency_arr, widthA, heightA, channelsA);
+	cudaDeviceSynchronize();
+	int* transparency_arr = new int[widthA * heightA];
+	cudaMemcpy(transparency_arr, dev_transparency_arr, widthA * heightA * sizeof(int), cudaMemcpyDeviceToHost);
 
-    for (int i = 0; i < widthA * heightA; ++i) {
-        cout << "R: " << h_rgbValuesA[i].x << " G: " << h_rgbValuesA[i].y << " B: " << h_rgbValuesA[i].z << endl;
-    }
+	// przerzucenie templatu na greyscale do tablicy host_three_dimension
+	uint8_t* dev_three;
+	cudaMalloc((void**)&dev_three, img_sizeA * sizeof(uint8_t));
+	grayscaleKernel << <gridSizeA, blockSize >> > (dev_imageA, dev_three, widthA, heightA, channelsA);
+	cudaDeviceSynchronize();
+	uint8_t* host_three_dimension = new uint8_t[img_sizeA];
+	cudaMemcpy(host_three_dimension, dev_three, img_sizeA * sizeof(uint8_t), cudaMemcpyDeviceToHost);
+	//stbi_write_jpg("test.jpg", widthA, heightA, channelsA, host_three_dimension, 100);
 
-    cudaFree(d_imageA);
-    cudaFree(d_rgbValuesA);
-    delete[] h_rgbValuesA;
-    stbi_image_free(h_imageA);
+	// przerzucenie host_three_dimension do jednego kanalu
+	uint8_t* dev_one;
+	cudaMalloc((void**)&dev_one, widthA * heightA * sizeof(uint8_t));
+	channelCompressionKernel << <gridSizeA, blockSize >> > (dev_one, dev_three, widthA, heightA, channelsA);
+	cudaDeviceSynchronize();
+	uint8_t* host_one_dimension = new uint8_t[widthA * heightA];
+	cudaMemcpy(host_one_dimension, dev_one, widthA * heightA * sizeof(uint8_t), cudaMemcpyDeviceToHost);
 
+	//uint8_t* dev_rotated_image;
+	//cudaMalloc((void**)&dev_rotated_image, img_sizeA);
+	//rotate90 << <gridSizeA, blockSize >> > (dev_imageA, dev_rotated_image, width, height, channels);
+	//cudaDeviceSynchronize();
+	//uint8_t* host_rotated_image = new uint8_t[img_sizeA];
+	//cudaMemcpy(host_rotated_image, dev_rotated_image, img_sizeA, cudaMemcpyDeviceToHost);
+	//stbi_write_jpg("rotated_image.jpg", heightA, widthA, channelsA, host_rotated_image, 100);
+	//cudaFree(dev_rotated_image);
 
-    int width, height, channels;
-    uint8_t* h_image = stbi_load("aaa1.jpg", &width, &height, &channels, 0);
-    if (h_image == nullptr) {
-        cerr << "Error loading image." << endl;
-        return -1;
-    }
+	//sprawdzenie i matching templatu ze zdjeciem
+	int* dev_sample_check;
+	cudaMalloc((void**)&dev_image, width * height * 3 * sizeof(uint8_t));
+	cudaMalloc((void**)&dev_sample_check, (width - widthA) * (height - heightA) * sizeof(int));
+	cudaMemcpy(dev_image, host_image, width * height * 3 * sizeof(uint8_t), cudaMemcpyHostToDevice);
+	int treshold = int(0.98 * widthA * heightA);  // to ma sie zmieniac w zaleznosci od ilosci pixeli naszego sampla, cyli jezeli litera bedzie 100x 100 pixeli to np chcemy sprawdzic czy zgadza sie 90% czyli 0,9*100*100 pixeli jesli tak to wykryte
+	subtractImagesKernel << <gridSize, blockSize >> > (dev_image, dev_imageA, dev_sample_check, dev_transparency_arr, width, height, widthA, heightA, treshold);
+	cudaDeviceSynchronize();
+	int* sample_check = new int[(width - widthA) * (height - heightA)];
+	cudaMemcpy(sample_check, dev_sample_check, (width - widthA) * (height - heightA) * sizeof(int), cudaMemcpyDeviceToHost);
 
-    size_t img_size = width * height * channels;
-    uint8_t* d_image, * d_result;
+	//for (int i = 0; i < (width - widthA) * (height - heightA); ++i) {
+	//	if (i % (width - widthA) == 0)
+	//	{
+	//		cout << endl;
+	//	}
+	//	cout << sample_check[i];
+	//}
 
-    // Alokacja pamięci dla oryginalnego obrazu
-    cudaMalloc(&d_image, img_size);
-    cudaMemcpy(d_image, h_image, img_size, cudaMemcpyHostToDevice);
+	// Zwolnienie pamięci GPU
+	cudaFree(dev_transparency_arr);
+	cudaFree(dev_imageA);
+	cudaFree(dev_image);
+	cudaFree(dev_sample_check);
+	cudaFree(dev_one);
+	cudaFree(dev_three);
 
-    // Ustawienie rozmiaru siatki i bloku
-    dim3 blockSize(16, 16);
-    dim3 gridSize((width + blockSize.x - 1) / blockSize.x, (height + blockSize.y - 1) / blockSize.y);
+	// Zwolnienie pamięci hosta
+	stbi_image_free(host_image);
+	stbi_image_free(host_imageA);
+	delete[] transparency_arr;
+	delete[] sample_check;
+	delete[] host_three_dimension;
+	delete[] host_one_dimension;
+	//delete[] host_rotated_image;
 
-    // Uruchomienie kernela do konwersji na skalę szarości
-    processImageKernel << <gridSize, blockSize >> > (d_image, width, height, channels);
-    cudaDeviceSynchronize();
+	cout << endl;
+	cout << endl;
+	cout << widthA << ' ' << heightA << endl << width << ' ' << height << endl;
+	cout << endl;
 
-    // Kopiowanie przetworzonych danych z powrotem do pamięci hosta
-    cudaMemcpy(h_image, d_image, img_size, cudaMemcpyDeviceToHost);
-    stbi_write_png("grayscale.png", width, height, channels, h_image, width * channels);
-
-    // Alokacja pamięci dla rozmytego obrazu
-    cudaMalloc(&d_result, img_size);
-
-    // Uruchomienie kernela do rozmycia gaussowskiego
-    gaussianBlurKernel << <gridSize, blockSize >> > (d_image, d_result, width, height, channels);
-    cudaDeviceSynchronize();
-    cudaMemcpy(h_image, d_result, img_size, cudaMemcpyDeviceToHost);
-    stbi_write_png("blurred.png", width, height, channels, h_image, width * channels);
-
-    // Uruchomienie kernela do filtru sepia
-    sepiaKernel << <gridSize, blockSize >> > (d_image, width, height, channels);
-    cudaDeviceSynchronize();
-    cudaMemcpy(h_image, d_image, img_size, cudaMemcpyDeviceToHost);
-    stbi_write_png("sepia.png", width, height, channels, h_image, width * channels);
-
-    negativeKernel << <gridSize, blockSize >> > (d_image, width, height, channels);
-    cudaDeviceSynchronize();
-    cudaMemcpy(h_image, d_image, img_size, cudaMemcpyDeviceToHost);
-    stbi_write_png("negative.png", width, height, channels, h_image, width * channels);
-
-
-    // Zwolnienie pamięci GPU
-    cudaFree(d_image);
-    cudaFree(d_result);
-
-    // Zwolnienie pamięci hosta
-    stbi_image_free(h_image);
-
-    return 0;
+	return 0;
 }
