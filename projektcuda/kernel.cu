@@ -1,4 +1,5 @@
 ﻿#define STB_IMAGE_IMPLEMENTATION
+#define _USE_MATH_DEFINES
 #include "stb_image.h"
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
@@ -8,6 +9,159 @@
 #include <cmath>
 
 using namespace std;
+
+__global__ void transparencyPixels(uint8_t* image, int* output, int width, int height, int channels);
+__global__ void grayscaleKernel(uint8_t* d_image, uint8_t* dev_three, int width, int height, int channels);
+__global__ void channelExtensionKernel(uint8_t* dev_one, uint8_t* dev_three, int width, int height, int channels);
+__global__ void channelCompressionKernel(uint8_t* dev_one, uint8_t* dev_three, int width, int height, int channels);
+__global__ void subtractImagesKernel(uint8_t* image, uint8_t* imageA, int* sample_check, int* transparency_array, int width, int height, int widthA, int heightA, int treshold);
+__global__ void rotate90degree(uint8_t* dev_input, uint8_t* dev_output, int width, int height);
+__global__ void rotate45degree(uint8_t* input, uint8_t* output, int width, int height, int newWidth, int newHeight);
+__global__ void increase_letters(uint8_t* input, uint8_t* output, int width, int height, int newWidth, int newHeight);
+__global__ void decrease_letters(uint8_t* input, uint8_t* output, int width, int height, int newWidth, int newHeight);
+
+int main() {
+	int widthA, heightA, channelsA, width, height, channels;
+	uint8_t* host_imageA = stbi_load("litera.jpg", &widthA, &heightA, &channelsA, 0);
+	if (host_imageA == nullptr) {
+		cerr << "Error loading sample image." << endl;
+		return -1;
+	}
+
+	uint8_t* host_image = stbi_load("testnyga.jpg", &width, &height, &channels, 0);
+	if (host_image == nullptr) {
+		cerr << "Error loading image to check." << endl;
+		return -1;
+	}
+
+	// wczytanie wymiarow 
+	size_t img_sizeA = widthA * heightA * channelsA;
+	uint8_t* dev_imageA;
+	size_t img_size = width * height * channels;
+	uint8_t* dev_image;
+
+	// ustawienia blokow na gpu
+	dim3 blockSize(16, 16);
+	dim3 gridSizeA((widthA + blockSize.x - 1) / blockSize.x, (heightA + blockSize.y - 1) / blockSize.y);
+	dim3 gridSize((width - widthA + blockSize.x - 1) / blockSize.x, (height - heightA + blockSize.y - 1) / blockSize.y);
+
+	// zrobienie tablicy skladajacej sie z 0 i 1 (tam gdzie 1 znaczy ze jest nasza litera A)
+	int* dev_transparency_arr;
+	cudaMalloc((void**)&dev_imageA, img_sizeA * sizeof(uint8_t));
+	cudaMalloc((void**)&dev_transparency_arr, widthA * heightA * sizeof(int));
+	cudaMemcpy(dev_imageA, host_imageA, img_sizeA * sizeof(uint8_t), cudaMemcpyHostToDevice);
+	transparencyPixels << <gridSizeA, blockSize >> > (dev_imageA, dev_transparency_arr, widthA, heightA, channelsA);
+	cudaDeviceSynchronize();
+	int* transparency_arr = new int[widthA * heightA];
+	cudaMemcpy(transparency_arr, dev_transparency_arr, widthA * heightA * sizeof(int), cudaMemcpyDeviceToHost);
+
+	// przerzucenie templatu na greyscale do tablicy host_three_dimension
+	uint8_t* dev_three;
+	cudaMalloc((void**)&dev_three, img_sizeA * sizeof(uint8_t));
+	grayscaleKernel << <gridSizeA, blockSize >> > (dev_imageA, dev_three, widthA, heightA, channelsA);
+	cudaDeviceSynchronize();
+	uint8_t* host_three_dimension = new uint8_t[img_sizeA];
+	cudaMemcpy(host_three_dimension, dev_three, img_sizeA * sizeof(uint8_t), cudaMemcpyDeviceToHost);
+	//stbi_write_jpg("test.jpg", widthA, heightA, channelsA, host_three_dimension, 100);
+
+	// przerzucenie host_three_dimension do jednego kanalu
+	uint8_t* dev_one;
+	cudaMalloc((void**)&dev_one, widthA * heightA * sizeof(uint8_t));
+	channelCompressionKernel << <gridSizeA, blockSize >> > (dev_one, dev_three, widthA, heightA, channelsA);
+	cudaDeviceSynchronize();
+	uint8_t* host_one_dimension = new uint8_t[widthA * heightA];
+	cudaMemcpy(host_one_dimension, dev_one, widthA * heightA * sizeof(uint8_t), cudaMemcpyDeviceToHost);
+
+	// obrócenie litery o 90stopni
+	uint8_t* dev_rotated90d_image;
+	cudaMalloc((void**)&dev_rotated90d_image, widthA * heightA * sizeof(uint8_t));
+	rotate90degree << <gridSizeA, blockSize >> > (dev_one, dev_rotated90d_image, widthA, heightA);
+	cudaDeviceSynchronize();
+	uint8_t* host_rotated90d_image = new uint8_t[widthA * heightA];
+	cudaMemcpy(host_rotated90d_image, dev_rotated90d_image, widthA * heightA * sizeof(uint8_t), cudaMemcpyDeviceToHost);
+	stbi_write_jpg("rotated90.jpg", heightA, widthA, 1, host_rotated90d_image, 100);
+
+	// obrócenie litery o 45stopni
+	uint8_t* dev_rotated45d_image;
+	int newDimension = static_cast<int>(sqrt(widthA * widthA + heightA * heightA));
+	int height_45d = newDimension + 2;
+	int width_45d = newDimension + 1;
+	dim3 gridSize45d((width_45d + blockSize.x - 1) / blockSize.x, (height_45d + blockSize.y - 1) / blockSize.y);
+	cudaMalloc((void**)&dev_rotated45d_image,  width_45d * height_45d * sizeof(uint8_t));
+	cudaMemset(dev_rotated45d_image, 255, width_45d * height_45d * sizeof(uint8_t));
+	rotate45degree << <gridSize45d, blockSize >> > (dev_one, dev_rotated45d_image, widthA, heightA, width_45d, height_45d);
+	cudaDeviceSynchronize();
+	uint8_t* host_rotated45d_image = new uint8_t[width_45d * height_45d];
+	cudaMemcpy(host_rotated45d_image, dev_rotated45d_image, width_45d * height_45d * sizeof(uint8_t), cudaMemcpyDeviceToHost);
+	stbi_write_jpg("rotated45.jpg", width_45d, height_45d, 1, host_rotated45d_image, 100);
+
+	// zwiększanie litery
+	uint8_t* dev_increase_image;
+	int height_increase = heightA * 1.5;
+	int width_increase = widthA * 1.5;
+	dim3 gridSizeincrease((width_increase + blockSize.x - 1) / blockSize.x, (height_increase + blockSize.y - 1) / blockSize.y);
+	cudaMalloc((void**)&dev_increase_image, width_increase * height_increase * sizeof(uint8_t));
+	cudaMemset(dev_increase_image, 255, width_increase * height_increase * sizeof(uint8_t));
+	increase_letters << <gridSizeincrease, blockSize >> > (dev_one, dev_increase_image, widthA, heightA, width_increase, height_increase);
+	cudaDeviceSynchronize();
+	uint8_t* host_increase_image = new uint8_t[width_increase * height_increase];
+	cudaMemcpy(host_increase_image, dev_increase_image, width_increase * height_increase * sizeof(uint8_t), cudaMemcpyDeviceToHost);
+	stbi_write_jpg("increase.jpg", width_increase, height_increase, 1, host_increase_image, 100);
+
+	// zmniejszanie litery
+	uint8_t* dev_decrease_image;
+	int height_decrease = heightA / 1.5;
+	int width_decrease = widthA / 1.5;
+	dim3 gridSizedecrease((width_decrease + blockSize.x - 1) / blockSize.x, (height_decrease + blockSize.y - 1) / blockSize.y);
+	cudaMalloc((void**)&dev_decrease_image, width_decrease * height_decrease * sizeof(uint8_t));
+	cudaMemset(dev_decrease_image, 255, width_decrease * height_decrease * sizeof(uint8_t));
+	decrease_letters << <gridSizedecrease, blockSize >> > (dev_one, dev_decrease_image, widthA, heightA, width_decrease, height_decrease);
+	cudaDeviceSynchronize();
+	uint8_t* host_decrease_image = new uint8_t[width_decrease * height_decrease];
+	cudaMemcpy(host_decrease_image, dev_decrease_image, width_decrease * height_decrease * sizeof(uint8_t), cudaMemcpyDeviceToHost);
+	stbi_write_jpg("decrease.jpg", width_decrease, height_decrease, 1, host_decrease_image, 100);
+
+	//sprawdzenie i matching templatu ze zdjeciem
+	int* dev_sample_check;
+	cudaMalloc((void**)&dev_image, width * height * 3 * sizeof(uint8_t));
+	cudaMalloc((void**)&dev_sample_check, (width - widthA) * (height - heightA) * sizeof(int));
+	cudaMemcpy(dev_image, host_image, width * height * 3 * sizeof(uint8_t), cudaMemcpyHostToDevice);
+	int treshold = int(0.98 * widthA * heightA);  // to ma sie zmieniac w zaleznosci od ilosci pixeli naszego sampla, cyli jezeli litera bedzie 100x 100 pixeli to np chcemy sprawdzic czy zgadza sie 90% czyli 0,9*100*100 pixeli jesli tak to wykryte
+	subtractImagesKernel << <gridSize, blockSize >> > (dev_image, dev_imageA, dev_sample_check, dev_transparency_arr, width, height, widthA, heightA, treshold);
+	cudaDeviceSynchronize();
+	int* sample_check = new int[(width - widthA) * (height - heightA)];
+	cudaMemcpy(sample_check, dev_sample_check, (width - widthA) * (height - heightA) * sizeof(int), cudaMemcpyDeviceToHost);
+
+	// Zwolnienie pamięci GPU
+	cudaFree(dev_transparency_arr);
+	cudaFree(dev_imageA);
+	cudaFree(dev_image);
+	cudaFree(dev_sample_check);
+	cudaFree(dev_one);
+	cudaFree(dev_three);
+	cudaFree(dev_rotated90d_image);
+	cudaFree(dev_rotated45d_image);
+	cudaFree(dev_increase_image);
+
+	// Zwolnienie pamięci hosta
+	stbi_image_free(host_image);
+	stbi_image_free(host_imageA);
+	delete[] transparency_arr;
+	delete[] sample_check;
+	delete[] host_three_dimension;
+	delete[] host_one_dimension;
+	delete[] host_rotated90d_image;
+	delete[] host_rotated45d_image;
+	delete[] host_increase_image;
+
+	cout << endl;
+	cout << endl;
+	cout << widthA << ' ' << heightA << endl << width << ' ' << height << endl;
+	cout << endl;
+
+	return 0;
+}
+
 
 
 __global__ void transparencyPixels(uint8_t* image, int* output, int width, int height, int channels) {
@@ -114,107 +268,67 @@ __global__ void subtractImagesKernel(uint8_t* image, uint8_t* imageA, int* sampl
 }
 
 
-int main() {
-	int widthA, heightA, channelsA, width, height, channels;
-	uint8_t* host_imageA = stbi_load("litera.jpg", &widthA, &heightA, &channelsA, 0);
-	if (host_imageA == nullptr) {
-		cerr << "Error loading sample image." << endl;
-		return -1;
+__global__ void rotate90degree(uint8_t* dev_input, uint8_t* dev_output, int width, int height) {
+	int x = blockIdx.x * blockDim.x + threadIdx.x;
+	int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+	if (x < width && y < height) {
+		int newIndex = y + (width - x - 1) * height;
+		int oldIndex = y * width + x;
+		dev_output[newIndex] = dev_input[oldIndex];
+	}
+}
+
+
+__global__ void rotate45degree(uint8_t* input, uint8_t* output, int width, int height, int newWidth, int newHeight) {
+	int x = blockIdx.x * blockDim.x + threadIdx.x;
+	int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+	if (x < newWidth && y < newHeight) {
+
+		float centerX = width / 2.0;
+		float centerY = height / 2.0;
+
+		float newX = x - newWidth / 2.0;
+		float newY = y - newHeight / 2.0;
+
+		float theta = -M_PI / 4.0;
+		float oldX = cosf(theta) * newX - sinf(theta) * newY + centerX;
+		float oldY = sinf(theta) * newX + cosf(theta) * newY + centerY;
+
+		if (oldX >= 0 && oldX < width && oldY >= 0 && oldY < height) {
+			int oldIndex = (int)roundf(oldY) * width + (int)roundf(oldX);
+			output[y * newWidth + x] = input[oldIndex];
+		}
+	}
+}
+
+
+__global__ void increase_letters(uint8_t* input, uint8_t* output, int width, int height, int newWidth, int newHeight) {
+	int x = blockIdx.x * blockDim.x + threadIdx.x;
+	int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+	if (x < newWidth && y < newHeight) {
+		int srcX = x / 1.5;
+		int srcY = y / 1.5;
+
+		if (srcX < width && srcY < height) {
+			output[y * newWidth + x] = input[srcY * width + srcX];
+		}
 	}
 
-	uint8_t* host_image = stbi_load("testnyga.jpg", &width, &height, &channels, 0);
-	if (host_image == nullptr) {
-		cerr << "Error loading image to check." << endl;
-		return -1;
+}
+
+__global__ void decrease_letters(uint8_t* input, uint8_t* output, int width, int height, int newWidth, int newHeight) {
+	int x = blockIdx.x * blockDim.x + threadIdx.x;
+	int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+	if (x < newWidth && y < newHeight) {
+		int srcX = x * 1.5;
+		int srcY = y * 1.5;
+
+		if (srcX < width && srcY < height) {
+			output[y * newWidth + x] = input[srcY * width + srcX];
+		}
 	}
-
-	// wczytanie wymiarow 
-	size_t img_sizeA = widthA * heightA * channelsA;
-	uint8_t* dev_imageA;
-	size_t img_size = width * height * channels;
-	uint8_t* dev_image;
-
-	// ustawienia blokow na gpu
-	dim3 blockSize(16, 16);
-	dim3 gridSizeA((widthA + blockSize.x - 1) / blockSize.x, (heightA + blockSize.y - 1) / blockSize.y);
-	dim3 gridSize((width - widthA + blockSize.x - 1) / blockSize.x, (height - heightA + blockSize.y - 1) / blockSize.y);
-
-	// zrobienie tablicy skladajacej sie z 0 i 1 (tam gdzie 1 znaczy ze jest nasza litera A)
-	int* dev_transparency_arr;
-	cudaMalloc((void**)&dev_imageA, img_sizeA * sizeof(uint8_t));
-	cudaMalloc((void**)&dev_transparency_arr, widthA * heightA * sizeof(int));
-	cudaMemcpy(dev_imageA, host_imageA, img_sizeA * sizeof(uint8_t), cudaMemcpyHostToDevice);
-	transparencyPixels << <gridSizeA, blockSize >> > (dev_imageA, dev_transparency_arr, widthA, heightA, channelsA);
-	cudaDeviceSynchronize();
-	int* transparency_arr = new int[widthA * heightA];
-	cudaMemcpy(transparency_arr, dev_transparency_arr, widthA * heightA * sizeof(int), cudaMemcpyDeviceToHost);
-
-	// przerzucenie templatu na greyscale do tablicy host_three_dimension
-	uint8_t* dev_three;
-	cudaMalloc((void**)&dev_three, img_sizeA * sizeof(uint8_t));
-	grayscaleKernel << <gridSizeA, blockSize >> > (dev_imageA, dev_three, widthA, heightA, channelsA);
-	cudaDeviceSynchronize();
-	uint8_t* host_three_dimension = new uint8_t[img_sizeA];
-	cudaMemcpy(host_three_dimension, dev_three, img_sizeA * sizeof(uint8_t), cudaMemcpyDeviceToHost);
-	//stbi_write_jpg("test.jpg", widthA, heightA, channelsA, host_three_dimension, 100);
-
-	// przerzucenie host_three_dimension do jednego kanalu
-	uint8_t* dev_one;
-	cudaMalloc((void**)&dev_one, widthA * heightA * sizeof(uint8_t));
-	channelCompressionKernel << <gridSizeA, blockSize >> > (dev_one, dev_three, widthA, heightA, channelsA);
-	cudaDeviceSynchronize();
-	uint8_t* host_one_dimension = new uint8_t[widthA * heightA];
-	cudaMemcpy(host_one_dimension, dev_one, widthA * heightA * sizeof(uint8_t), cudaMemcpyDeviceToHost);
-
-	//uint8_t* dev_rotated_image;
-	//cudaMalloc((void**)&dev_rotated_image, img_sizeA);
-	//rotate90 << <gridSizeA, blockSize >> > (dev_imageA, dev_rotated_image, width, height, channels);
-	//cudaDeviceSynchronize();
-	//uint8_t* host_rotated_image = new uint8_t[img_sizeA];
-	//cudaMemcpy(host_rotated_image, dev_rotated_image, img_sizeA, cudaMemcpyDeviceToHost);
-	//stbi_write_jpg("rotated_image.jpg", heightA, widthA, channelsA, host_rotated_image, 100);
-	//cudaFree(dev_rotated_image);
-
-	//sprawdzenie i matching templatu ze zdjeciem
-	int* dev_sample_check;
-	cudaMalloc((void**)&dev_image, width * height * 3 * sizeof(uint8_t));
-	cudaMalloc((void**)&dev_sample_check, (width - widthA) * (height - heightA) * sizeof(int));
-	cudaMemcpy(dev_image, host_image, width * height * 3 * sizeof(uint8_t), cudaMemcpyHostToDevice);
-	int treshold = int(0.98 * widthA * heightA);  // to ma sie zmieniac w zaleznosci od ilosci pixeli naszego sampla, cyli jezeli litera bedzie 100x 100 pixeli to np chcemy sprawdzic czy zgadza sie 90% czyli 0,9*100*100 pixeli jesli tak to wykryte
-	subtractImagesKernel << <gridSize, blockSize >> > (dev_image, dev_imageA, dev_sample_check, dev_transparency_arr, width, height, widthA, heightA, treshold);
-	cudaDeviceSynchronize();
-	int* sample_check = new int[(width - widthA) * (height - heightA)];
-	cudaMemcpy(sample_check, dev_sample_check, (width - widthA) * (height - heightA) * sizeof(int), cudaMemcpyDeviceToHost);
-
-	//for (int i = 0; i < (width - widthA) * (height - heightA); ++i) {
-	//	if (i % (width - widthA) == 0)
-	//	{
-	//		cout << endl;
-	//	}
-	//	cout << sample_check[i];
-	//}
-
-	// Zwolnienie pamięci GPU
-	cudaFree(dev_transparency_arr);
-	cudaFree(dev_imageA);
-	cudaFree(dev_image);
-	cudaFree(dev_sample_check);
-	cudaFree(dev_one);
-	cudaFree(dev_three);
-
-	// Zwolnienie pamięci hosta
-	stbi_image_free(host_image);
-	stbi_image_free(host_imageA);
-	delete[] transparency_arr;
-	delete[] sample_check;
-	delete[] host_three_dimension;
-	delete[] host_one_dimension;
-	//delete[] host_rotated_image;
-
-	cout << endl;
-	cout << endl;
-	cout << widthA << ' ' << heightA << endl << width << ' ' << height << endl;
-	cout << endl;
-
-	return 0;
 }
