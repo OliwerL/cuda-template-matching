@@ -7,6 +7,7 @@
 #include "device_launch_parameters.h"
 #include <iostream>
 #include <cmath>
+#include <vector>
 
 using namespace std;
 
@@ -19,6 +20,8 @@ __global__ void rotate90degree(uint8_t* dev_input, uint8_t* dev_output, int widt
 __global__ void rotate45degree(uint8_t* input, uint8_t* output, int width, int height, int newWidth, int newHeight);
 __global__ void increase_letters(uint8_t* input, uint8_t* output, int width, int height, int newWidth, int newHeight);
 __global__ void decrease_letters(uint8_t* input, uint8_t* output, int width, int height, int newWidth, int newHeight);
+__global__ void bounding_box(uint8_t* input, uint8_t* output, int width, int height, int widthA, int heightA, int* sample_check, int* top_left, int samples);
+__global__ void find_top_left(int width, int height, int widthA, int heightA, int* sample_check, int* top_left, int* global_counter);
 
 int main() {
 	int widthA, heightA, channelsA, width, height, channels;
@@ -44,6 +47,7 @@ int main() {
 	dim3 blockSize(16, 16);
 	dim3 gridSizeA((widthA + blockSize.x - 1) / blockSize.x, (heightA + blockSize.y - 1) / blockSize.y);
 	dim3 gridSize((width - widthA + blockSize.x - 1) / blockSize.x, (height - heightA + blockSize.y - 1) / blockSize.y);
+	dim3 gridSizeBB((width + blockSize.x - 1) / blockSize.x, (height + blockSize.y - 1) / blockSize.y);
 
 	// zrobienie tablicy skladajacej sie z 0 i 1 (tam gdzie 1 znaczy ze jest nasza litera A)
 	int* dev_transparency_arr;
@@ -120,17 +124,53 @@ int main() {
 	uint8_t* host_decrease_image = new uint8_t[width_decrease * height_decrease];
 	cudaMemcpy(host_decrease_image, dev_decrease_image, width_decrease * height_decrease * sizeof(uint8_t), cudaMemcpyDeviceToHost);
 	stbi_write_jpg("decrease.jpg", width_decrease, height_decrease, 1, host_decrease_image, 100);
-
+	
 	//sprawdzenie i matching templatu ze zdjeciem
 	int* dev_sample_check;
 	cudaMalloc((void**)&dev_image, width * height * 3 * sizeof(uint8_t));
 	cudaMalloc((void**)&dev_sample_check, (width - widthA) * (height - heightA) * sizeof(int));
 	cudaMemcpy(dev_image, host_image, width * height * 3 * sizeof(uint8_t), cudaMemcpyHostToDevice);
 	int treshold = int(0.98 * widthA * heightA);  // to ma sie zmieniac w zaleznosci od ilosci pixeli naszego sampla, cyli jezeli litera bedzie 100x 100 pixeli to np chcemy sprawdzic czy zgadza sie 90% czyli 0,9*100*100 pixeli jesli tak to wykryte
+
 	subtractImagesKernel << <gridSize, blockSize >> > (dev_image, dev_imageA, dev_sample_check, dev_transparency_arr, width, height, widthA, heightA, treshold);
 	cudaDeviceSynchronize();
 	int* sample_check = new int[(width - widthA) * (height - heightA)];
 	cudaMemcpy(sample_check, dev_sample_check, (width - widthA) * (height - heightA) * sizeof(int), cudaMemcpyDeviceToHost);
+
+	int samples = 0;
+	for (int i = 0; i < (width - widthA) * (height - heightA); i++) {
+		if (sample_check[i] == 1) {
+			samples++;
+		}
+	}
+	
+	
+	//szukanie rogu
+	int* dev_top_left;
+	int* global_counter;
+	cudaMalloc(&global_counter, sizeof(int));
+	cudaMemset(global_counter, 0, sizeof(int)); // Zainicjuj licznik na 0
+
+	cudaMalloc((void**)&dev_top_left, samples * 2 * sizeof(int));
+	find_top_left << <gridSize, blockSize >> > ( width, height, widthA, heightA, dev_sample_check, dev_top_left, global_counter);
+	cudaDeviceSynchronize();
+	int* host_top_left = new int[samples * 2];
+	cudaMemcpy(host_top_left, dev_top_left, samples * 2 * sizeof(int), cudaMemcpyDeviceToHost);
+	
+	//otaczanie bounding boxem
+	uint8_t* dev_with_boundingBox;
+	cudaMalloc((void**)&dev_with_boundingBox, width * height * 3 * sizeof(uint8_t));
+	cudaMemcpy(dev_image, host_image, width* height * 3 * sizeof(uint8_t), cudaMemcpyHostToDevice);
+	bounding_box << <gridSizeBB, blockSize >> > (dev_image, dev_with_boundingBox, width, height, widthA, heightA, dev_sample_check, dev_top_left, samples);
+	cudaDeviceSynchronize();
+	uint8_t* host_with_boundingBox = new uint8_t[width * height * 3];
+	cudaMemcpy(host_with_boundingBox, dev_with_boundingBox, width* height * 3 * sizeof(uint8_t), cudaMemcpyDeviceToHost);
+	stbi_write_jpg("boundingBox1.jpg", width, height, channels, host_with_boundingBox, 100);
+
+	//for (int i = 0; i < samples * 2; i++) {
+	//	cout << host_top_left[i]<<endl;
+	//}
+
 
 	// Zwolnienie pamięci GPU
 	cudaFree(dev_transparency_arr);
@@ -142,6 +182,10 @@ int main() {
 	cudaFree(dev_rotated90d_image);
 	cudaFree(dev_rotated45d_image);
 	cudaFree(dev_increase_image);
+	cudaFree(dev_with_boundingBox);
+	cudaFree(global_counter);
+	cudaFree(dev_top_left);
+	
 
 	// Zwolnienie pamięci hosta
 	stbi_image_free(host_image);
@@ -153,7 +197,9 @@ int main() {
 	delete[] host_rotated90d_image;
 	delete[] host_rotated45d_image;
 	delete[] host_increase_image;
-
+	delete[] host_with_boundingBox;
+	delete[] host_top_left;
+	
 	cout << endl;
 	cout << endl;
 	cout << widthA << ' ' << heightA << endl << width << ' ' << height << endl;
@@ -225,6 +271,7 @@ __global__ void subtractImagesKernel(uint8_t* image, uint8_t* imageA, int* sampl
 	int width, int height, int widthA, int heightA, int treshold) {
 	int startX = blockIdx.x * blockDim.x + threadIdx.x;
 	int startY = blockIdx.y * blockDim.y + threadIdx.y;
+
 	//printf("%d, %d\n", startX, startY);
 	if (startX <= (width - widthA) && startY <= (height - heightA)) {
 
@@ -261,6 +308,7 @@ __global__ void subtractImagesKernel(uint8_t* image, uint8_t* imageA, int* sampl
 		{
 			sample_check[startY * (width - widthA) + startX] = 1;
 			printf("\n Template found; precision: %d / %d, coordinates: %d, %d\n", check_buffer, widthA * heightA, startX, startY);
+
 		}
 		else
 			sample_check[startY * (width - widthA) + startX] = 0;
@@ -331,4 +379,48 @@ __global__ void decrease_letters(uint8_t* input, uint8_t* output, int width, int
 			output[y * newWidth + x] = input[srcY * width + srcX];
 		}
 	}
+}
+
+__global__ void bounding_box(uint8_t* input, uint8_t* output, int width, int height, int widthA, int heightA, int* sample_check, int* top_left, int samples) {
+	int x = blockIdx.x * blockDim.x + threadIdx.x;
+	int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+	if (x < width && y < height) {
+		int idx = (y * width + x) * 3; // Indeks dla formatu RGB
+
+		output[idx] = input[idx];    
+		output[idx + 1] = input[idx + 1];
+		output[idx + 2] = input[idx + 2];
+
+		for (int i = 0; i < samples; i++) {
+			int box_x = top_left[i * 2];
+			int box_y = top_left[i * 2 + 1];
+
+			// Sprawdzanie, czy piksel znajduje się na krawędziach któregokolwiek bounding boxa
+			if (x >= box_x  && x <= box_x + widthA  &&
+				y >= box_y  && y <= box_y + heightA  &&
+				(x == box_x  || x == box_x + widthA  || y == box_y  || y == box_y + heightA )) {
+				// Rysuj krawędzie prostokąta
+				output[idx] = 255;     // Czerwony
+				output[idx + 1] = 0;   // Zielony
+				output[idx + 2] = 0;   // Niebieski
+				break; // Zakończ pętlę, ponieważ piksel jest już na krawędzi bounding boxa
+			}
+		}
+	}
+}
+
+__global__ void find_top_left(int width, int height, int widthA, int heightA, int* sample_check, int* top_left, int* global_counter) {
+	int x = blockIdx.x * blockDim.x + threadIdx.x;
+	int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+	if (x <= (width - widthA) && y <= (height - heightA)) {
+		if (sample_check[y * (width - widthA) + x] == 1) {
+			int index = atomicAdd(global_counter, 1);				//podkreśla, ale działa nie wiem co mu się nie podoba
+			top_left[index * 2] = x;
+			top_left[index * 2 + 1] = y;
+			//printf("%d, %d \n", top_left[index * 2],top_left[index * 2 + 1] = y);
+		}
+	}
+	
 }
