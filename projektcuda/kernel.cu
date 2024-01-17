@@ -17,7 +17,12 @@ __global__ void channelExtensionKernel(uint8_t* dev_one, uint8_t* dev_three, int
 __global__ void channelCompressionKernel(uint8_t* dev_one, uint8_t* dev_three, int width, int height, int channels);
 __global__ void subtractImagesKernel(uint8_t* image, uint8_t* imageA, int* sample_check, int* transparency_array, int width, int height, int widthA, int heightA, int treshold);
 __global__ void rotate90degree(uint8_t* dev_input, uint8_t* dev_output, int width, int height);
+__global__ void rotate180degree(uint8_t* dev_input, uint8_t* dev_output, int width, int height);
+__global__ void rotate270degree(uint8_t* dev_input, uint8_t* dev_output, int width, int height);
 __global__ void rotate45degree(uint8_t* input, uint8_t* output, int width, int height, int newWidth, int newHeight);
+__global__ void rotate135degree(uint8_t* input, uint8_t* output, int width, int height, int newWidth, int newHeight);
+__global__ void rotate225degree(uint8_t* input, uint8_t* output, int width, int height, int newWidth, int newHeight);
+__global__ void rotate315degree(uint8_t* input, uint8_t* output, int width, int height, int newWidth, int newHeight);
 __global__ void increase_letters(uint8_t* input, uint8_t* output, int width, int height, int newWidth, int newHeight);
 __global__ void decrease_letters(uint8_t* input, uint8_t* output, int width, int height, int newWidth, int newHeight);
 __global__ void bounding_box(uint8_t* input, uint8_t* output, int width, int height, int widthA, int heightA, int* sample_check, int* top_left, int samples);
@@ -85,19 +90,87 @@ int main() {
 	cudaMemcpy(host_rotated90d_image, dev_rotated90d_image, widthA * heightA * sizeof(uint8_t), cudaMemcpyDeviceToHost);
 	stbi_write_jpg("rotated90.jpg", heightA, widthA, 1, host_rotated90d_image, 100);
 
+	// obrócenie litery o 180stopni
+	uint8_t* dev_rotated180d_image;
+	cudaMalloc((void**)&dev_rotated180d_image, widthA * heightA * sizeof(uint8_t));
+	rotate180degree << <gridSizeA, blockSize >> > (dev_one, dev_rotated180d_image, widthA, heightA);
+	cudaDeviceSynchronize();
+	uint8_t* host_rotated180d_image = new uint8_t[widthA * heightA];
+	cudaMemcpy(host_rotated180d_image, dev_rotated180d_image, widthA * heightA * sizeof(uint8_t), cudaMemcpyDeviceToHost);
+	stbi_write_jpg("rotated180.jpg", widthA, heightA, 1, host_rotated180d_image, 100);
+
+	// obrócenie litery o 270stopni
+	uint8_t* dev_rotated270d_image;
+	cudaMalloc((void**)&dev_rotated270d_image, widthA * heightA * sizeof(uint8_t));
+	rotate270degree << <gridSizeA, blockSize >> > (dev_one, dev_rotated270d_image, widthA, heightA);
+	cudaDeviceSynchronize();
+	uint8_t* host_rotated270d_image = new uint8_t[widthA * heightA];
+	cudaMemcpy(host_rotated270d_image, dev_rotated270d_image, widthA * heightA * sizeof(uint8_t), cudaMemcpyDeviceToHost);
+	stbi_write_jpg("rotated270.jpg", heightA, widthA, 1, host_rotated270d_image, 100);
+
 	// obrócenie litery o 45stopni
 	uint8_t* dev_rotated45d_image;
 	int newDimension = static_cast<int>(sqrt(widthA * widthA + heightA * heightA));
 	int height_45d = newDimension + 2;
 	int width_45d = newDimension + 1;
 	dim3 gridSize45d((width_45d + blockSize.x - 1) / blockSize.x, (height_45d + blockSize.y - 1) / blockSize.y);
-	cudaMalloc((void**)&dev_rotated45d_image,  width_45d * height_45d * sizeof(uint8_t));
+	cudaMalloc((void**)&dev_rotated45d_image, width_45d * height_45d * sizeof(uint8_t));
 	cudaMemset(dev_rotated45d_image, 255, width_45d * height_45d * sizeof(uint8_t));
 	rotate45degree << <gridSize45d, blockSize >> > (dev_one, dev_rotated45d_image, widthA, heightA, width_45d, height_45d);
 	cudaDeviceSynchronize();
 	uint8_t* host_rotated45d_image = new uint8_t[width_45d * height_45d];
 	cudaMemcpy(host_rotated45d_image, dev_rotated45d_image, width_45d * height_45d * sizeof(uint8_t), cudaMemcpyDeviceToHost);
 	stbi_write_jpg("rotated45.jpg", width_45d, height_45d, 1, host_rotated45d_image, 100);
+
+	// obrócenie litery o 135 stopni
+	uint8_t* dev_rotated135d_image;
+	int newDimension135 = static_cast<int>(sqrt(widthA * widthA + heightA * heightA));
+	int height_135d = newDimension135 + 2; 
+	int width_135d = newDimension135 + 1; 
+	dim3 gridSize135d((width_135d + blockSize.x - 1) / blockSize.x, (height_135d + blockSize.y - 1) / blockSize.y);
+
+	cudaMalloc((void**)&dev_rotated135d_image, width_135d * height_135d * sizeof(uint8_t));
+	cudaMemset(dev_rotated135d_image, 255, width_135d * height_135d * sizeof(uint8_t)); 
+
+	rotate135degree << <gridSize135d, blockSize >> > (dev_one, dev_rotated135d_image, widthA, heightA, width_135d, height_135d);
+	cudaDeviceSynchronize();
+
+	uint8_t* host_rotated135d_image = new uint8_t[width_135d * height_135d];
+	cudaMemcpy(host_rotated135d_image, dev_rotated135d_image, width_135d * height_135d * sizeof(uint8_t), cudaMemcpyDeviceToHost);
+	stbi_write_jpg("rotated135.jpg", width_135d, height_135d, 1, host_rotated135d_image, 100);
+
+	// obrócenie litery o 225 stopni
+	uint8_t* dev_rotated225d_image;
+	int newDimension225 = static_cast<int>(sqrt(widthA * widthA + heightA * heightA));
+	int height_225d = newDimension225 + 2;
+	int width_225d = newDimension225 + 1;
+	dim3 gridSize225d((width_225d + blockSize.x - 1) / blockSize.x, (height_225d + blockSize.y - 1) / blockSize.y);
+
+	cudaMalloc((void**)&dev_rotated225d_image, width_225d* height_225d * sizeof(uint8_t));
+	cudaMemset(dev_rotated225d_image, 255, width_225d* height_225d * sizeof(uint8_t));
+
+	rotate225degree << <gridSize225d, blockSize >> > (dev_one, dev_rotated225d_image, widthA, heightA, width_225d, height_225d);
+	cudaDeviceSynchronize();
+
+	uint8_t* host_rotated225d_image = new uint8_t[width_225d * height_225d];
+	cudaMemcpy(host_rotated225d_image, dev_rotated225d_image, width_225d* height_225d * sizeof(uint8_t), cudaMemcpyDeviceToHost);
+	stbi_write_jpg("rotated225.jpg", width_225d, height_225d, 1, host_rotated225d_image, 100);
+
+
+
+	// obrócenie litery o 315stopni
+	uint8_t* dev_rotated315d_image;
+	//int newDimension = static_cast<int>(sqrt(widthA * widthA + heightA * heightA));
+	int height_315d = newDimension + 2;
+	int width_315d = newDimension + 1;
+	dim3 gridSize315d((width_315d + blockSize.x - 1) / blockSize.x, (height_315d + blockSize.y - 1) / blockSize.y);
+	cudaMalloc((void**)&dev_rotated315d_image, width_315d * height_315d * sizeof(uint8_t));
+	cudaMemset(dev_rotated315d_image, 255, width_315d * height_315d * sizeof(uint8_t));
+	rotate315degree << <gridSize315d, blockSize >> > (dev_one, dev_rotated315d_image, widthA, heightA, width_315d, height_315d);
+	cudaDeviceSynchronize();
+	uint8_t* host_rotated315d_image = new uint8_t[width_315d * height_315d];
+	cudaMemcpy(host_rotated315d_image, dev_rotated315d_image, width_315d * height_315d * sizeof(uint8_t), cudaMemcpyDeviceToHost);
+	stbi_write_jpg("rotated315.jpg", width_315d, height_315d, 1, host_rotated315d_image, 100);
 
 	// zwiększanie litery
 	uint8_t* dev_increase_image;
@@ -124,7 +197,7 @@ int main() {
 	uint8_t* host_decrease_image = new uint8_t[width_decrease * height_decrease];
 	cudaMemcpy(host_decrease_image, dev_decrease_image, width_decrease * height_decrease * sizeof(uint8_t), cudaMemcpyDeviceToHost);
 	stbi_write_jpg("decrease.jpg", width_decrease, height_decrease, 1, host_decrease_image, 100);
-	
+
 	//sprawdzenie i matching templatu ze zdjeciem
 	int* dev_sample_check;
 	cudaMalloc((void**)&dev_image, width * height * 3 * sizeof(uint8_t));
@@ -143,8 +216,8 @@ int main() {
 			samples++;
 		}
 	}
-	
-	
+
+
 	//szukanie rogu
 	int* dev_top_left;
 	int* global_counter;
@@ -152,19 +225,19 @@ int main() {
 	cudaMemset(global_counter, 0, sizeof(int)); // Zainicjuj licznik na 0
 
 	cudaMalloc((void**)&dev_top_left, samples * 2 * sizeof(int));
-	find_top_left << <gridSize, blockSize >> > ( width, height, widthA, heightA, dev_sample_check, dev_top_left, global_counter);
+	find_top_left << <gridSize, blockSize >> > (width, height, widthA, heightA, dev_sample_check, dev_top_left, global_counter);
 	cudaDeviceSynchronize();
 	int* host_top_left = new int[samples * 2];
 	cudaMemcpy(host_top_left, dev_top_left, samples * 2 * sizeof(int), cudaMemcpyDeviceToHost);
-	
+
 	//otaczanie bounding boxem
 	uint8_t* dev_with_boundingBox;
 	cudaMalloc((void**)&dev_with_boundingBox, width * height * 3 * sizeof(uint8_t));
-	cudaMemcpy(dev_image, host_image, width* height * 3 * sizeof(uint8_t), cudaMemcpyHostToDevice);
+	cudaMemcpy(dev_image, host_image, width * height * 3 * sizeof(uint8_t), cudaMemcpyHostToDevice);
 	bounding_box << <gridSizeBB, blockSize >> > (dev_image, dev_with_boundingBox, width, height, widthA, heightA, dev_sample_check, dev_top_left, samples);
 	cudaDeviceSynchronize();
 	uint8_t* host_with_boundingBox = new uint8_t[width * height * 3];
-	cudaMemcpy(host_with_boundingBox, dev_with_boundingBox, width* height * 3 * sizeof(uint8_t), cudaMemcpyDeviceToHost);
+	cudaMemcpy(host_with_boundingBox, dev_with_boundingBox, width * height * 3 * sizeof(uint8_t), cudaMemcpyDeviceToHost);
 	stbi_write_jpg("boundingBox1.jpg", width, height, channels, host_with_boundingBox, 100);
 
 	//for (int i = 0; i < samples * 2; i++) {
@@ -185,7 +258,7 @@ int main() {
 	cudaFree(dev_with_boundingBox);
 	cudaFree(global_counter);
 	cudaFree(dev_top_left);
-	
+
 
 	// Zwolnienie pamięci hosta
 	stbi_image_free(host_image);
@@ -199,7 +272,7 @@ int main() {
 	delete[] host_increase_image;
 	delete[] host_with_boundingBox;
 	delete[] host_top_left;
-	
+
 	cout << endl;
 	cout << endl;
 	cout << widthA << ' ' << heightA << endl << width << ' ' << height << endl;
@@ -327,6 +400,28 @@ __global__ void rotate90degree(uint8_t* dev_input, uint8_t* dev_output, int widt
 	}
 }
 
+__global__ void rotate270degree(uint8_t* dev_input, uint8_t* dev_output, int width, int height) {
+	int x = blockIdx.x * blockDim.x + threadIdx.x;
+	int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+	if (x < width && y < height) {
+		int newIndex = (height - y - 1) + x * height;
+		int oldIndex = y * width + x;
+		dev_output[newIndex] = dev_input[oldIndex];
+	}
+}
+__global__ void rotate180degree(uint8_t* dev_input, uint8_t* dev_output, int width, int height) {
+	int x = blockIdx.x * blockDim.x + threadIdx.x;
+	int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+	if (x < width && y < height) {
+		int newIndex = (height - y - 1) * width + (width - x - 1);
+		int oldIndex = y * width + x;
+		dev_output[newIndex] = dev_input[oldIndex];
+	}
+}
+
+
 
 __global__ void rotate45degree(uint8_t* input, uint8_t* output, int width, int height, int newWidth, int newHeight) {
 	int x = blockIdx.x * blockDim.x + threadIdx.x;
@@ -343,6 +438,82 @@ __global__ void rotate45degree(uint8_t* input, uint8_t* output, int width, int h
 		float theta = -M_PI / 4.0;
 		float oldX = cosf(theta) * newX - sinf(theta) * newY + centerX;
 		float oldY = sinf(theta) * newX + cosf(theta) * newY + centerY;
+
+		if (oldX >= 0 && oldX < width && oldY >= 0 && oldY < height) {
+			int oldIndex = (int)roundf(oldY) * width + (int)roundf(oldX);
+			output[y * newWidth + x] = input[oldIndex];
+		}
+	}
+}
+
+__global__ void rotate135degree(uint8_t* input, uint8_t* output, int width, int height, int newWidth, int newHeight) {
+	int x = blockIdx.x * blockDim.x + threadIdx.x;
+	int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+	if (x < newWidth && y < newHeight) {
+
+		float centerX = width / 2.0;
+		float centerY = height / 2.0;
+
+		float newX = x - newWidth / 2.0;
+		float newY = y - newHeight / 2.0;
+
+		float theta = -3.0f * M_PI / 4.0f;
+		float oldX = cosf(theta) * newX - sinf(theta) * newY + centerX;
+		float oldY = sinf(theta) * newX + cosf(theta) * newY + centerY;
+
+		if (oldX >= 0 && oldX < width && oldY >= 0 && oldY < height) {
+			int oldIndex = (int)roundf(oldY) * width + (int)roundf(oldX);
+			output[y * newWidth + x] = input[oldIndex];
+		}
+		else {
+			output[y * newWidth + x] = 255;
+		}
+	}
+}
+
+__global__ void rotate225degree(uint8_t* input, uint8_t* output, int width, int height, int newWidth, int newHeight) {
+	int x = blockIdx.x * blockDim.x + threadIdx.x;
+	int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+	if (x < newWidth && y < newHeight) {
+		float centerX = width / 2.0;
+		float centerY = height / 2.0;
+
+		float newX = x - newWidth / 2.0;
+		float newY = y - newHeight / 2.0;
+
+		float theta = -3.0f * M_PI / 4.0f; 
+		float oldX = cosf(theta) * newX + sinf(theta) * newY + centerX;
+		float oldY = -sinf(theta) * newX + cosf(theta) * newY + centerY;
+
+		if (oldX >= 0 && oldX < width && oldY >= 0 && oldY < height) {
+			int oldIndex = (int)roundf(oldY) * width + (int)roundf(oldX);
+			output[y * newWidth + x] = input[oldIndex];
+		}
+		else {
+			output[y * newWidth + x] = 255;
+		}
+	}
+}
+
+
+
+__global__ void rotate315degree(uint8_t* input, uint8_t* output, int width, int height, int newWidth, int newHeight) {
+	int x = blockIdx.x * blockDim.x + threadIdx.x;
+	int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+	if (x < newWidth && y < newHeight) {
+
+		float centerX = width / 2.0;
+		float centerY = height / 2.0;
+
+		float newX = x - newWidth / 2.0;
+		float newY = y - newHeight / 2.0;
+
+		float theta = -M_PI / 4.0;
+		float oldX = cosf(theta) * newX + sinf(theta) * newY + centerX;
+		float oldY = -sinf(theta) * newX + cosf(theta) * newY + centerY;
 
 		if (oldX >= 0 && oldX < width && oldY >= 0 && oldY < height) {
 			int oldIndex = (int)roundf(oldY) * width + (int)roundf(oldX);
@@ -388,7 +559,7 @@ __global__ void bounding_box(uint8_t* input, uint8_t* output, int width, int hei
 	if (x < width && y < height) {
 		int idx = (y * width + x) * 3; // Indeks dla formatu RGB
 
-		output[idx] = input[idx];    
+		output[idx] = input[idx];
 		output[idx + 1] = input[idx + 1];
 		output[idx + 2] = input[idx + 2];
 
@@ -397,9 +568,9 @@ __global__ void bounding_box(uint8_t* input, uint8_t* output, int width, int hei
 			int box_y = top_left[i * 2 + 1];
 
 			// Sprawdzanie, czy piksel znajduje się na krawędziach któregokolwiek bounding boxa
-			if (x >= box_x  && x <= box_x + widthA  &&
-				y >= box_y  && y <= box_y + heightA  &&
-				(x == box_x  || x == box_x + widthA  || y == box_y  || y == box_y + heightA )) {
+			if (x >= box_x && x <= box_x + widthA &&
+				y >= box_y && y <= box_y + heightA &&
+				(x == box_x || x == box_x + widthA || y == box_y || y == box_y + heightA)) {
 				// Rysuj krawędzie prostokąta
 				output[idx] = 255;     // Czerwony
 				output[idx + 1] = 0;   // Zielony
@@ -422,5 +593,5 @@ __global__ void find_top_left(int width, int height, int widthA, int heightA, in
 			//printf("%d, %d \n", top_left[index * 2],top_left[index * 2 + 1] = y);
 		}
 	}
-	
+
 }
