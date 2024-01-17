@@ -1,1 +1,32 @@
-﻿  projektcuda.vcxproj -> C:\Users\Lubiejescbanany\source\repos\Cuda_Template_Matching\x64\Debug\projektcuda.exe
+﻿  Compiling CUDA source file kernel.cu...
+  
+  C:\Users\pprze\source\repos\projektCUDA_GIT\cuda-template-matching\projektcuda>"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin\nvcc.exe" -gencode=arch=compute_52,code=\"sm_52,compute_52\" --use-local-env -ccbin "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.37.32822\bin\HostX64\x64" -x cu   -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include" -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include"  -G   --keep-dir x64\Debug  -maxrregcount=0   --machine 64 --compile -cudart static  -g  -DWIN32 -DWIN64 -D_DEBUG -D_CONSOLE -D_MBCS -Xcompiler "/EHsc /W3 /nologo /Od /FS /Zi /RTC1 /MDd " -Xcompiler "/Fdx64\Debug\vc143.pdb" -o C:\Users\pprze\source\repos\projektCUDA_GIT\cuda-template-matching\projektcuda\x64\Debug\kernel.cu.obj "C:\Users\pprze\source\repos\projektCUDA_GIT\cuda-template-matching\projektcuda\kernel.cu" 
+C:\Users\pprze\source\repos\projektCUDA_GIT\cuda-template-matching\projektcuda\stb_image.h(4275): warning #550-D: variable "old_limit" was set but never used
+       unsigned int cur, limit, old_limit;
+                                ^
+  
+  Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+  
+C:\Users\pprze\source\repos\projektCUDA_GIT\cuda-template-matching\projektcuda\stb_image.h(5182): warning #550-D: variable "idata_limit_old" was set but never used
+                   stbi__uint32 idata_limit_old = idata_limit;
+                                ^
+  
+C:\Users\pprze\source\repos\projektCUDA_GIT\cuda-template-matching\projektcuda\stb_image.h(6969): warning #550-D: variable "out_size" was set but never used
+          int out_size = 0;
+              ^
+  
+C:\Users\pprze\source\repos\projektCUDA_GIT\cuda-template-matching\projektcuda\stb_image.h(6970): warning #550-D: variable "delays_size" was set but never used
+          int delays_size = 0;
+              ^
+  
+C:\Users\pprze\source\repos\projektCUDA_GIT\cuda-template-matching\projektcuda\kernel.cu(48): warning #177-D: variable "img_size" was declared but never referenced
+    	size_t img_size = width * height * channels;
+    	       ^
+  
+  kernel.cu
+  tmpxft_00003f1c_00000000-7_kernel.cudafe1.cpp
+C:\Users\pprze\source\repos\projektCUDA_GIT\cuda-template-matching\projektcuda\kernel.cu(177): warning C4244: "inicjowanie": konwersja z "double" do "int", możliwa utrata danych
+C:\Users\pprze\source\repos\projektCUDA_GIT\cuda-template-matching\projektcuda\kernel.cu(178): warning C4244: "inicjowanie": konwersja z "double" do "int", możliwa utrata danych
+C:\Users\pprze\source\repos\projektCUDA_GIT\cuda-template-matching\projektcuda\kernel.cu(190): warning C4244: "inicjowanie": konwersja z "double" do "int", możliwa utrata danych
+C:\Users\pprze\source\repos\projektCUDA_GIT\cuda-template-matching\projektcuda\kernel.cu(191): warning C4244: "inicjowanie": konwersja z "double" do "int", możliwa utrata danych
+  projektcuda.vcxproj -> C:\Users\pprze\source\repos\projektCUDA_GIT\cuda-template-matching\x64\Debug\projektcuda.exe
