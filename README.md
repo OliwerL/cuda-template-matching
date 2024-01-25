@@ -26,4 +26,10 @@ Przykładowe outputy programu po wykryciu litery A:
 - Detekcja obiektów: wykrywanie określonych obiektów w obrazie
 - Tworzenie bounding boxów na obrazie
 - Zmiana kolorów bounding boxów w zależności od histogramu kolorów zdjęcia by były widoczne
+
+## Autorzy
+  Maksym Małek 188809
+  Oliwer Lisek 188947
+  Jakub Dobruchowski 188868
+  Przemysław Piątkiewicz 188823
   
