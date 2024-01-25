@@ -31,7 +31,7 @@ __global__ void find_top_left90(int width, int height, int widthA90, int heightA
 
 
 int main() {
-	int widthA, heightA, channelsA, widthA90, heightA90, channelsA90, width, height, channels;
+	int widthA, heightA, channelsA, widthA90, heightA90, channelsA90, widthA45, heightA45, channelsA45, width, height, channels, widthAinc, heightAinc, channelsAinc, widthAdec, heightAdec, channelsAdec;
 	uint8_t* host_imageA = stbi_load("litera.jpg", &widthA, &heightA, &channelsA, 0);
 	if (host_imageA == nullptr) {
 		cerr << "Error loading sample image." << endl;
@@ -40,7 +40,7 @@ int main() {
 
 
 
-	uint8_t* host_image = stbi_load("labedz.jpg", &width, &height, &channels, 0);
+	uint8_t* host_image = stbi_load("labedzM.jpg", &width, &height, &channels, 0);
 	if (host_image == nullptr) {
 		cerr << "Error loading image to check." << endl;
 		return -1;
@@ -216,21 +216,59 @@ int main() {
 	cudaMemcpy(host_decrease_image, dev_decrease_image, width_decrease * height_decrease * sizeof(uint8_t), cudaMemcpyDeviceToHost);
 	stbi_write_jpg("decrease.jpg", width_decrease, height_decrease, 1, host_decrease_image, 100);
 
+	//wczytanie zrotowanych zdjec
+
 	uint8_t* host_imageA90 = stbi_load("rotated90.jpg", &widthA90, &heightA90, &channelsA90, 0);
 	if (host_imageA90 == nullptr) {
 		cerr << "Error loading sample image." << endl;
 		return -1;
 	}
 	uint8_t* host_imageA270 = stbi_load("rotated270.jpg", &widthA90, &heightA90, &channelsA90, 0);
-	if (host_imageA90 == nullptr) {
+	if (host_imageA270 == nullptr) {
+		cerr << "Error loading sample image." << endl;
+		return -1;
+	}
+	uint8_t* host_imageA180 = stbi_load("rotated180.jpg", &widthA, &heightA, &channelsA, 0);
+	if (host_imageA180 == nullptr) {
+		cerr << "Error loading sample image." << endl;
+		return -1;
+	}
+	uint8_t* host_imageA45 = stbi_load("rotated45.jpg", &widthA45, &heightA45, &channelsA45, 0);
+	if (host_imageA45 == nullptr) {
+		cerr << "Error loading sample image." << endl;
+		return -1;
+	}
+	uint8_t* host_imageA135 = stbi_load("rotated135.jpg", &widthA45, &heightA45, &channelsA45, 0);
+	if (host_imageA135 == nullptr) {
+		cerr << "Error loading sample image." << endl;
+		return -1;
+	}
+	uint8_t* host_imageA225 = stbi_load("rotated225.jpg", &widthA45, &heightA45, &channelsA45, 0);
+	if (host_imageA225 == nullptr) {
+		cerr << "Error loading sample image." << endl;
+		return -1;
+	}
+	uint8_t* host_imageA315 = stbi_load("rotated315.jpg", &widthA45, &heightA45, &channelsA45, 0);
+	if (host_imageA315 == nullptr) {
 		cerr << "Error loading sample image." << endl;
 		return -1;
 	}
 
 
+
 	size_t img_sizeA90 = widthA90 * heightA90 * channelsA90;
+	size_t img_sizeA45 = widthA45 * heightA45 * channelsA45;
+
+
 	uint8_t* dev_imageA90;
 	uint8_t* dev_imageA270;
+	uint8_t* dev_imageA180;
+	uint8_t* dev_imageA45;
+	uint8_t* dev_imageA135;
+	uint8_t* dev_imageA225;
+	uint8_t* dev_imageA315;
+	uint8_t* dev_imageAinc;
+	uint8_t* dev_imageAdec;
 
 	//transparency
 	int* dev_transparency_arr90;
@@ -251,43 +289,134 @@ int main() {
 	int* transparency_arr270 = new int[widthA90 * heightA90];
 	cudaMemcpy(transparency_arr270, dev_transparency_arr270, widthA90 * heightA90 * sizeof(int), cudaMemcpyDeviceToHost);
 
+	int* dev_transparency_arr180;
+	cudaMalloc((void**)&dev_transparency_arr180, widthA * heightA * sizeof(int));
+	cudaMalloc((void**)&dev_imageA180, img_sizeA * sizeof(uint8_t));
+	cudaMemcpy(dev_imageA180, host_imageA180, img_sizeA * sizeof(uint8_t), cudaMemcpyHostToDevice);
+	transparencyPixels << <gridSizeA, blockSize >> > (dev_imageA180, dev_transparency_arr180, widthA, heightA, channelsA);
+	cudaDeviceSynchronize();
+	int* transparency_arr180 = new int[widthA * heightA];
+	cudaMemcpy(transparency_arr180, dev_transparency_arr180, widthA * heightA * sizeof(int), cudaMemcpyDeviceToHost);
+
+	int* dev_transparency_arr45;
+	cudaMalloc((void**)&dev_transparency_arr45, widthA45 * heightA45 * sizeof(int));
+	cudaMalloc((void**)&dev_imageA45, img_sizeA45 * sizeof(uint8_t));
+	cudaMemcpy(dev_imageA45, host_imageA45, img_sizeA45 * sizeof(uint8_t), cudaMemcpyHostToDevice);
+	transparencyPixels << <gridSizeA, blockSize >> > (dev_imageA45, dev_transparency_arr45, widthA45, heightA45, channelsA45);
+	cudaDeviceSynchronize();
+	int* transparency_arr45 = new int[widthA45 * heightA45];
+	cudaMemcpy(transparency_arr45, dev_transparency_arr45, widthA45 * heightA45 * sizeof(int), cudaMemcpyDeviceToHost);
+
+	int* dev_transparency_arr135;
+	cudaMalloc((void**)&dev_transparency_arr135, widthA45 * heightA45 * sizeof(int));
+	cudaMalloc((void**)&dev_imageA135, img_sizeA45 * sizeof(uint8_t));
+	cudaMemcpy(dev_imageA135, host_imageA135, img_sizeA45 * sizeof(uint8_t), cudaMemcpyHostToDevice);
+	transparencyPixels << <gridSizeA, blockSize >> > (dev_imageA135, dev_transparency_arr135, widthA45, heightA45, channelsA45);
+	cudaDeviceSynchronize();
+	int* transparency_arr135 = new int[widthA45 * heightA45];
+	cudaMemcpy(transparency_arr135, dev_transparency_arr135, widthA45 * heightA45 * sizeof(int), cudaMemcpyDeviceToHost);
+
+	int* dev_transparency_arr225;
+	cudaMalloc((void**)&dev_transparency_arr225, widthA45 * heightA45 * sizeof(int));
+	cudaMalloc((void**)&dev_imageA225, img_sizeA45 * sizeof(uint8_t));
+	cudaMemcpy(dev_imageA225, host_imageA225, img_sizeA45 * sizeof(uint8_t), cudaMemcpyHostToDevice);
+	transparencyPixels << <gridSizeA, blockSize >> > (dev_imageA225, dev_transparency_arr225, widthA45, heightA45, channelsA45);
+	cudaDeviceSynchronize();
+	int* transparency_arr225 = new int[widthA45 * heightA45];
+	cudaMemcpy(transparency_arr225, dev_transparency_arr225, widthA45 * heightA45 * sizeof(int), cudaMemcpyDeviceToHost);
+
+	int* dev_transparency_arr315;
+	cudaMalloc((void**)&dev_transparency_arr315, widthA45* heightA45 * sizeof(int));
+	cudaMalloc((void**)&dev_imageA315, img_sizeA45 * sizeof(uint8_t));
+	cudaMemcpy(dev_imageA315, host_imageA315, img_sizeA45 * sizeof(uint8_t), cudaMemcpyHostToDevice);
+	transparencyPixels << <gridSizeA, blockSize >> > (dev_imageA315, dev_transparency_arr315, widthA45, heightA45, channelsA45);
+	cudaDeviceSynchronize();
+	int* transparency_arr315 = new int[widthA45 * heightA45];
+	cudaMemcpy(transparency_arr315, dev_transparency_arr315, widthA45* heightA45 * sizeof(int), cudaMemcpyDeviceToHost);
+
+
+
 
 	//sprawdzenie i matching templatu ze zdjeciem
+
 	int* dev_sample_check;
-	cudaMalloc((void**)&dev_image, width * height * 3 * sizeof(uint8_t));
-	cudaMalloc((void**)&dev_sample_check, (width - widthA) * (height - heightA) * sizeof(int));
-	cudaMemcpy(dev_image, host_image, width * height * 3 * sizeof(uint8_t), cudaMemcpyHostToDevice);
-	int treshold = int(0.97 * widthA * heightA);  // to ma sie zmieniac w zaleznosci od ilosci pixeli naszego sampla, cyli jezeli litera bedzie 100x 100 pixeli to np chcemy sprawdzic czy zgadza sie 90% czyli 0,9*100*100 pixeli jesli tak to wykryte
-
-	subtractImagesKernel << <gridSize, blockSize >> > (dev_image, dev_imageA, dev_sample_check, dev_transparency_arr, width, height, widthA, heightA, treshold);
-	cudaDeviceSynchronize();
-	int* sample_check = new int[(width - widthA) * (height - heightA)];
-	cudaMemcpy(sample_check, dev_sample_check, (width - widthA) * (height - heightA) * sizeof(int), cudaMemcpyDeviceToHost);
-
-
 	int* dev_sample_check90;
 	int* dev_sample_check270;
-	cudaMalloc((void**)&dev_image, width * height * 3 * sizeof(uint8_t));
+	int* dev_sample_check180;
+	int* dev_sample_check45;
+	int* dev_sample_check135;
+	int* dev_sample_check225;
+	int* dev_sample_check315;
+
+	
+	int treshold = int(0.97 * widthA * heightA);  // to ma sie zmieniac w zaleznosci od ilosci pixeli naszego sampla, cyli jezeli litera bedzie 100x 100 pixeli to np chcemy sprawdzic czy zgadza sie 90% czyli 0,9*100*100 pixeli jesli tak to wykryte
+	int treshold45 = int(0.97 * widthA45 * heightA45);
+
+	
+	cudaMalloc((void**)&dev_image, width* height * 3 * sizeof(uint8_t));
+	
+	cudaMalloc((void**)&dev_sample_check, (width - widthA)* (height - heightA) * sizeof(int));
 	cudaMalloc((void**)&dev_sample_check90, (width - widthA90) * (height - heightA90) * sizeof(int));
 	cudaMalloc((void**)&dev_sample_check270, (width - widthA90) * (height - heightA90) * sizeof(int));
-	cudaMemcpy(dev_image, host_image, width * height * 3 * sizeof(uint8_t), cudaMemcpyHostToDevice);
-	int treshold90 = int(0.97 * widthA90 * heightA90);  // to ma sie zmieniac w zaleznosci od ilosci pixeli naszego sampla, cyli jezeli litera bedzie 100x 100 pixeli to np chcemy sprawdzic czy zgadza sie 90% czyli 0,9*100*100 pixeli jesli tak to wykryte
+	cudaMalloc((void**)&dev_sample_check180, (width - widthA) * (height - heightA) * sizeof(int));
+	cudaMalloc((void**)&dev_sample_check45, (width - widthA45)* (height - heightA45) * sizeof(int));
+	cudaMalloc((void**)&dev_sample_check135, (width - widthA45)* (height - heightA45) * sizeof(int));
+	cudaMalloc((void**)&dev_sample_check225, (width - widthA45)* (height - heightA45) * sizeof(int));
+	cudaMalloc((void**)&dev_sample_check315, (width - widthA45)* (height - heightA45) * sizeof(int));
 
-	subtractImagesKernel << <gridSize, blockSize >> > (dev_image, dev_imageA90, dev_sample_check90, dev_transparency_arr90, width, height, widthA90, heightA90, treshold90);
+
+	cudaMemcpy(dev_image, host_image, width * height * 3 * sizeof(uint8_t), cudaMemcpyHostToDevice);
+	
+	subtractImagesKernel << <gridSize, blockSize >> > (dev_image, dev_imageA, dev_sample_check, dev_transparency_arr, width, height, widthA, heightA, treshold);
+	subtractImagesKernel << <gridSize, blockSize >> > (dev_image, dev_imageA90, dev_sample_check90, dev_transparency_arr90, width, height, widthA90, heightA90, treshold);
+	subtractImagesKernel << <gridSize, blockSize >> > (dev_image, dev_imageA270, dev_sample_check270, dev_transparency_arr270, width, height, widthA90, heightA90, treshold);
+	subtractImagesKernel << <gridSize, blockSize >> > (dev_image, dev_imageA180, dev_sample_check180, dev_transparency_arr180, width, height, widthA, heightA, treshold);
+	subtractImagesKernel << <gridSize, blockSize >> > (dev_image, dev_imageA45, dev_sample_check45, dev_transparency_arr45, width, height, widthA45, heightA45, treshold45);
+	subtractImagesKernel << <gridSize, blockSize >> > (dev_image, dev_imageA135, dev_sample_check135, dev_transparency_arr135, width, height, widthA45, heightA45, treshold45);
+	subtractImagesKernel << <gridSize, blockSize >> > (dev_image, dev_imageA225, dev_sample_check225, dev_transparency_arr225, width, height, widthA45, heightA45, treshold45);
+	subtractImagesKernel << <gridSize, blockSize >> > (dev_image, dev_imageA315, dev_sample_check315, dev_transparency_arr315, width, height, widthA45, heightA45, treshold45);
+
+
 	cudaDeviceSynchronize();
-	subtractImagesKernel << <gridSize, blockSize >> > (dev_image, dev_imageA270, dev_sample_check270, dev_transparency_arr270, width, height, widthA90, heightA90, treshold90);
-	cudaDeviceSynchronize();
+
 	int* sample_check90 = new int[(width - widthA90) * (height - heightA90)];
 	int* sample_check270 = new int[(width - widthA90) * (height - heightA90)];
+	int* sample_check180 = new int[(width - widthA) * (height - heightA)];
+	int* sample_check45 = new int[(width - widthA45) * (height - heightA45)];
+	int* sample_check135 = new int[(width - widthA45) * (height - heightA45)];
+	int* sample_check225 = new int[(width - widthA45) * (height - heightA45)];
+	int* sample_check315 = new int[(width - widthA45) * (height - heightA45)];
+	int* sample_check = new int[(width - widthA) * (height - heightA)];
+
+
+	cudaMemcpy(sample_check, dev_sample_check, (width - widthA)* (height - heightA) * sizeof(int), cudaMemcpyDeviceToHost);
 	cudaMemcpy(sample_check90, dev_sample_check90, (width - widthA90) * (height - heightA90) * sizeof(int), cudaMemcpyDeviceToHost);
 	cudaMemcpy(sample_check270, dev_sample_check270, (width - widthA90) * (height - heightA90) * sizeof(int), cudaMemcpyDeviceToHost);
+	cudaMemcpy(sample_check180, dev_sample_check180, (width - widthA) * (height - heightA) * sizeof(int), cudaMemcpyDeviceToHost);
+	cudaMemcpy(sample_check45, dev_sample_check45, (width - widthA45)* (height - heightA45) * sizeof(int), cudaMemcpyDeviceToHost);
+	cudaMemcpy(sample_check135, dev_sample_check135, (width - widthA45)* (height - heightA45) * sizeof(int), cudaMemcpyDeviceToHost);
+	cudaMemcpy(sample_check225, dev_sample_check225, (width - widthA45)* (height - heightA45) * sizeof(int), cudaMemcpyDeviceToHost);
+	cudaMemcpy(sample_check315, dev_sample_check315, (width - widthA45)* (height - heightA45) * sizeof(int), cudaMemcpyDeviceToHost);
+
+
 
 	int samples = 0;
 	for (int i = 0; i < (width - widthA) * (height - heightA); i++) {
-		if (sample_check[i] == 1 || sample_check90[i] == 1 || sample_check270[i] == 1) {
+		if (sample_check[i] == 1 || sample_check180[i] == 1) {
 			samples++;
 		}
 	}
+	for (int i = 0; i < (width - widthA90) * (height - heightA90); i++) {
+		if (sample_check90[i] == 1 || sample_check270[i] == 1) {
+			samples++;
+		}
+	}
+	for (int i = 0; i < (width - widthA45) * (height - heightA45); i++) {
+		if (sample_check45[i] == 1 || sample_check135[i] == 1 || sample_check225[i] == 1 || sample_check315[i] == 1) {
+			samples++;
+		}
+	}
+
 
 
 
@@ -301,26 +430,31 @@ int main() {
 	find_top_left << <gridSize, blockSize >> > (width, height, widthA, heightA, dev_sample_check, dev_top_left, global_counter);
 	find_top_left << <gridSize, blockSize >> > (width, height, widthA90, heightA90, dev_sample_check90, dev_top_left, global_counter);
 	find_top_left << <gridSize, blockSize >> > (width, height, widthA90, heightA90, dev_sample_check270, dev_top_left, global_counter);
+	find_top_left << <gridSize, blockSize >> > (width, height, widthA, heightA, dev_sample_check180, dev_top_left, global_counter);
+	find_top_left << <gridSize, blockSize >> > (width, height, widthA45, heightA45, dev_sample_check45, dev_top_left, global_counter);
+	find_top_left << <gridSize, blockSize >> > (width, height, widthA45, heightA45, dev_sample_check135, dev_top_left, global_counter);
+	find_top_left << <gridSize, blockSize >> > (width, height, widthA45, heightA45, dev_sample_check225, dev_top_left, global_counter);
+	find_top_left << <gridSize, blockSize >> > (width, height, widthA45, heightA45, dev_sample_check315, dev_top_left, global_counter);
+
+
 	cudaDeviceSynchronize();
 	int* host_top_left = new int[samples * 2];
-	int* host_top_left90 = new int[samples * 2];
+	
 	cudaMemcpy(host_top_left, dev_top_left, samples * 2 * sizeof(int), cudaMemcpyDeviceToHost);
 
 	//otaczanie bounding boxem
 	uint8_t* dev_with_boundingBox;
-	uint8_t* dev_with_boundingBox1;
 
-	cudaMalloc((void**)&dev_with_boundingBox1, width * height * 3 * sizeof(uint8_t));
 	cudaMalloc((void**)&dev_with_boundingBox, width * height * 3 * sizeof(uint8_t));
 	cudaMemcpy(dev_image, host_image, width * height * 3 * sizeof(uint8_t), cudaMemcpyHostToDevice);
+	
 	bounding_box << <gridSizeBB, blockSize >> > (dev_image, dev_with_boundingBox, width, height, widthA, heightA, dev_sample_check, dev_top_left, samples);
-
 	cudaDeviceSynchronize();
+
 	uint8_t* host_with_boundingBox = new uint8_t[width * height * 3];
-	uint8_t* host_with_boundingBox1 = new uint8_t[width * height * 3];
+
 	cudaMemcpy(host_with_boundingBox, dev_with_boundingBox, width * height * 3 * sizeof(uint8_t), cudaMemcpyDeviceToHost);
-	cudaMemcpy(host_with_boundingBox1, dev_with_boundingBox, width * height * 3 * sizeof(uint8_t), cudaMemcpyDeviceToHost);
-	stbi_write_jpg("boundingBox1.jpg", width, height, channels, host_with_boundingBox1, 100);
+	stbi_write_jpg("boundingBox1.jpg", width, height, channels, host_with_boundingBox, 100);
 
 
 
@@ -348,7 +482,21 @@ int main() {
 	cudaFree(dev_transparency_arr270);
 	cudaFree(dev_imageA270);
 	cudaFree(dev_sample_check270);
-
+	cudaFree(dev_transparency_arr45);
+	cudaFree(dev_imageA45);
+	cudaFree(dev_sample_check45);
+	cudaFree(dev_transparency_arr135);
+	cudaFree(dev_imageA135);
+	cudaFree(dev_sample_check135);
+	cudaFree(dev_transparency_arr180);
+	cudaFree(dev_imageA180);
+	cudaFree(dev_sample_check180);
+	cudaFree(dev_transparency_arr225);
+	cudaFree(dev_imageA225);
+	cudaFree(dev_sample_check225);
+	cudaFree(dev_transparency_arr315);
+	cudaFree(dev_imageA315);
+	cudaFree(dev_sample_check315);
 
 	// Zwolnienie pamięci hosta
 	stbi_image_free(host_image);
@@ -367,8 +515,13 @@ int main() {
 	delete[] host_increase_image;
 	delete[] host_with_boundingBox;
 	delete[] host_top_left;
+	delete[] transparency_arr45;
 	delete[] transparency_arr90;
+	delete[] transparency_arr135;
+	delete[] transparency_arr180;
+	delete[] transparency_arr225;
 	delete[] transparency_arr270;
+	delete[] transparency_arr315;
 
 	cout << endl;
 	cout << endl;
@@ -669,8 +822,8 @@ __global__ void bounding_box(uint8_t* input, uint8_t* output, int width, int hei
 				y >= box_y && y <= box_y + heightA &&
 				(x == box_x || x == box_x + heightA || y == box_y || y == box_y + heightA)) {
 				// Rysuj krawędzie prostokąta
-				output[idx] = 255;     // Czerwony
-				output[idx + 1] = 0;   // Zielony
+				output[idx] = 0;     // Czerwony
+				output[idx + 1] = 255;   // Zielony
 				output[idx + 2] = 0;   // Niebieski
 				break; // Zakończ pętlę, ponieważ piksel jest już na krawędzi bounding boxa
 			}
