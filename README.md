@@ -28,8 +28,8 @@ Przykładowe outputy programu po wykryciu litery A:
 - Zmiana kolorów bounding boxów w zależności od histogramu kolorów zdjęcia by były widoczne
 
 ## Autorzy
-  Maksym Małek 188809
-  Oliwer Lisek 188947
-  Jakub Dobruchowski 188868
-  Przemysław Piątkiewicz 188823
+- Maksym Małek 188809
+- Oliwer Lisek 188947
+- Jakub Dobruchowski 188868
+- Przemysław Piątkiewicz 188823
   
