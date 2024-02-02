@@ -18,6 +18,8 @@ Przykładowe outputy programu po wykryciu litery A:
 
 ![Wykryte A](images/output33.jpg)
 
+![Wykryte A](images/output36.png)
+
 ## Przykładowe Funkcje Wykorzystywane w Projekcie
 - Ładowanie i zapisywanie obrazów za pomocą biblioteki stb_image
 - Przetwarzanie obrazów: konwersja na skale szarości, wykrywanie przezroczystości
